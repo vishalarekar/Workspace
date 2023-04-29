@@ -1,0 +1,12 @@
+sudo apt-get update
+sudo apt-get install docker.io -y
+curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
+sudo dpkg -i minikube_latest_amd64.deb
+sudo chmod 777 /var/run/docker.sock
+minikube start
+sudo snap install kubectl --classic
+kubectl get po -A
+minikube addons enable ingress
+kubectl create deployment nginx --image=nginx --port=80
+kubectl expose deployment nginx --type=NodePort 
+

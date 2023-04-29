@@ -1,0 +1,150 @@
+Add ip in local DNS
+
+echo 172.31.11.61 master >> /etc/hosts--private ip
+echo 172.31.10.100 node-1 >> /etc/hosts
+echo 172.31.1.65 node-2 >> /etc/hosts
+2. update hostname
+
+3.Install docker
+start docker 
+enable docker
+
+4.Add drivers.
+
+container runtime
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
+# sysctl params required by setup, params persist across reboots
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+
+# Apply sysctl params without reboot
+sudo sysctl --system
+
+#Verify that the net.bridge.bridge-nf-call-iptables, net.bridge.bridge-nf-call-ip6tables, net.ipv4.ip_forward system variables are set to 1 in your sysctl config by running below instruction:
+
+sysctl net.bridge.bridge-nf-call-iptables net.bridge.bridge-nf-call-ip6tables net.ipv4.ip_forward
+
+#config containerRD
+You can find this file under the path /etc/containerd/config.toml.
+
+#Managing conatiner cgroup all machine
+#restart docker 
+enable docker
+
+#Install K8s components All machine
+
+install kubeadm
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-\$basearch
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+exclude=kubelet kubeadm kubectl
+EOF
+
+# Set SELinux in permissive mode (effectively disabling it)
+sudo setenforce 0
+sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+
+sudo yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+
+sudo systemctl enable --now kubelet
+
+
+kubeadm init --apiserver-advertise-address=172.31.11.61 --pod-network-cidr=192.168.0.0/16 facing any error --only for master
+#kubeadm reset -f
+#iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X
+2.Second, you need to change your Docker cgroup driver to systemd (recommended CRI conf for kubernetes kubelet by default) then restart docker service:
+
+cat > /etc/docker/daemon.json <<EOF
+{
+  "exec-opts": ["native.cgroupdriver=systemd"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m"
+  },
+  "storage-driver": "overlay2"
+}
+EOF
+
+#systemctl daemon-reload
+#systemctl restart docker
+3.Finally you need to turn swapoff and restart and enable kubelet services
+
+#swapoff -a
+#systemctl start kubelet 
+
+4.rm /etc/containerd/config.toml
+#systemctl restart containerd
+#kubeadm init
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 172.31.11.61:6443 --token fbl518.vkad3sb5utxt3vwj \
+        --discovery-token-ca-cert-hash sha256:eeac1fd4b4e4ac4339206e1236326b91953ca0629ffbd631f7fd5d239f916a6f
+
+_________________________________________________________________________________________________________________________________________________________
+[control-plane] Using manifest folder "/etc/kubernetes/manifests"
+[control-plane] Creating static Pod manifest for "kube-apiserver"
+[control-plane] Creating static Pod manifest for "kube-controller-manager"
+[control-plane] Creating static Pod manifest for "kube-scheduler"
+[etcd] Creating static Pod manifest for local etcd in "/etc/kubernetes/manifests"
+_______________________________________________________________________________________________________________________________________________________________
+
+#kubectl get pods --all-namespaces
+
+#Kubectl autocomplete
+BASH
+
+source <(kubectl completion bash) # set up autocomplete in bash into the current shell, bash-completion package should be installed first.
+echo "source <(kubectl completion bash)" >> ~/.bashrc 
+
+ERROR #The connection to the server 172.31.11.61:6443 was refused - did you specify the right host or port?
+I've encountered this problem and swapoff -a works for me though.
+
+sudo -i
+swapoff -a
+exit
+strace -eopenat kubectl version
+#https://docs.tigera.io/
+
+DNS Configuration ---calico--Kind image
+#curl https://raw.githubusercontent.com/projectcalico/calico/v3.25.0/manifests/canal.yaml -O --Master
+#kubectl apply -f canal.yaml
+
+#kubectl get pods --all-namespaces
+
+#dashboard/
+#https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/
+#kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+
+#kubernetes-dashboard/
+in that type:cluster replace with NodePort for outside access -> take public ip of master and port -->kubectl get pods --all-namespaces running on https
+
+
